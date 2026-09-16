@@ -1,0 +1,4 @@
+nltk>=3.8
+symspellpy>=6.7
+pyperclip>=1.8
+pynput>=1.7

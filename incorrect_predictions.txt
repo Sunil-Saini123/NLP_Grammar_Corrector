@@ -1,0 +1,27 @@
+INCORRECT GRAMMAR CORRECTION PREDICTIONS
+================================================================================
+
+Test #40 [Medium]
+
+Input:
+He suggested me to take a break.
+
+Expected:
+He suggested that I take a break.
+
+Predicted:
+He suggested me to take a break.
+--------------------------------------------------------------------------------
+
+Test #58 [Hard]
+
+Input:
+Having completed the assignment, the laptop was switched off.
+
+Expected:
+Having completed the assignment, I switched off the laptop.
+
+Predicted:
+Having completed the assignment, the laptop was switched off.
+--------------------------------------------------------------------------------
+
