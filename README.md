@@ -7,7 +7,7 @@ strictly separated layers so the NLP engine can be tested and tuned for
 accuracy on its own, independent of the OS integration.
 
 ```
-grammar_checker/
+NLP_Grammar_Corrector/
 ├── engine/                      # LAYER 1 — Core NLP engine (testable standalone)
 │   ├── ngram_model.py           # Trigram LM (Brown corpus) — fluency scoring, candidate ranking
 │   ├── spell_checker.py         # Norvig edit-distance spell checker + corpus frequencies
@@ -67,7 +67,7 @@ grammar_checker/
 This mirrors how early production grammar checkers (e.g. early Grammarly,
 LanguageTool's rule engine) actually worked before neural GEC models.
 
-## Rule coverage (30 categories)
+## Rule coverage (42 categories)
 
 | Category | Example fix |
 |---|---|
@@ -119,8 +119,35 @@ recommend.
 
 ## Setup
 
+Run these commands from the project root. A virtual environment keeps the
+project's NLP dependencies isolated from your system Python installation.
+
+### Windows PowerShell
+
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+If PowerShell blocks activation, allow scripts for the current terminal only:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+.\venv\Scripts\Activate.ps1
+```
+
+### macOS / Linux
+
 ```bash
-pip install -r requirements.txt
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+```bash
 python build_models.py     # one-time: trains the n-gram LM + builds spell-check frequency table
 ```
 
