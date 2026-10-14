@@ -185,7 +185,7 @@ python desktop_app/hotkey_listener.py
 
 Then, in **any application** (Word, Gmail, Google Docs, Notepad, Slack...):
 1. Select some text
-2. Press **Ctrl+Alt+G**
+2. Press **Ctrl+Alt+H**
 3. The selection is replaced with the corrected version
 
 Platform notes:
