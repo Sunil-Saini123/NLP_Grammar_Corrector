@@ -1,6 +1,18 @@
 INCORRECT GRAMMAR CORRECTION PREDICTIONS
 ================================================================================
 
+Test #37 [Medium]
+
+Input:
+I have many homeworks to complete.
+
+Expected:
+I have a lot of homework to complete.
+
+Predicted:
+I have many homework to complete.
+--------------------------------------------------------------------------------
+
 Test #40 [Medium]
 
 Input:

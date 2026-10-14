@@ -31,10 +31,15 @@ def check(tagged_sentence, tokens):
         if w0.lower() not in PREPOSITIONS:
             continue
         # look for "<noun/pronoun> and I" shortly after the preposition
-        for j in range(i + 1, min(i + 5, n - 2)):
+        for j in range(i + 1, min(i + 4, n - 2)):      # prep + (det) + noun + "and I"
             w1, t1 = tagged_sentence[j]
             w2, t2 = tagged_sentence[j + 1] if j + 1 < n else ("", "")
             if w1.lower() == "and" and w2.lower() == "i":
+                # "... and I study ..." - "I" starts a new clause (it has its own verb)
+                if j + 2 < n and tagged_sentence[j + 2][1].startswith(("VB", "MD")):
+                    break
+                if any(tagged_sentence[k][1].startswith(("VB", "RB")) for k in range(i + 1, j)):
+                    break
                 errors.append({
                     "start": j + 1, "end": j + 2,
                     "type": "pronoun_case",

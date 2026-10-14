@@ -35,6 +35,8 @@ def check(tagged_sentence, tokens):
         lw = word.lower()
         if lw in ("a", "an") and i + 1 < n:
             next_word, next_tag = tagged_sentence[i + 1]
+            if next_word.startswith("Zqprot"):
+                continue  # masked URL/e-mail/path placeholder - sound unknown
             # skip over adjectives to find the head noun's leading sound
             # (e.g., "a old man" -> check sound of "old", article attaches to next word directly)
             should_be_an = _starts_with_vowel_sound(next_word)

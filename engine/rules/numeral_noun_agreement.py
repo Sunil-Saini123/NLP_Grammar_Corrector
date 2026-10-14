@@ -27,6 +27,11 @@ def _to_plural(noun):
     return result
 
 
+_UNIT_ABBREVIATIONS = {"am", "pm", "kg", "km", "cm", "mm", "gb", "mb", "kb", "tb", "hz", "ms", "ft", "lb",
+                       "oz", "ml", "mg", "min", "sec", "hr", "hrs", "yr", "yrs", "mph", "kmh", "usd", "inr",
+                       "percent", "per", "feet", "sheep", "fish", "deer", "series", "species", "o'clock"}
+
+
 def _numeral_value(word):
     """Best-effort: returns None if not a simple recognizable number word/digit."""
     lw = word.lower()
@@ -51,6 +56,8 @@ def check(tagged_sentence, tokens):
             continue
         next_word, next_tag = tagged_sentence[i + 1]
         if next_tag != "NN":
+            continue
+        if next_word.lower() in _UNIT_ABBREVIATIONS:
             continue
         correct = _to_plural(next_word)
         if correct.lower() == next_word.lower():

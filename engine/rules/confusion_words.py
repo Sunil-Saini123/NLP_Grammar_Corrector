@@ -249,6 +249,17 @@ def check(tagged_sentence, tokens, lm):
         for form in conf_set:
             if form == current_form:
                 continue
+            # A possessive ("their/your/its") must be followed by a word; before
+            # punctuation or at the end of the sentence it is never right, so
+            # "I went there." must not become "I went their."
+            if (len(form) == 1 and form[0] in ("their", "your", "its", "our")
+                    and (i + 1 >= n or not any(ch.isalnum() for ch in tokens[i + 1]))):
+                continue
+            # a contraction ("they're", "you're", "it's") needs a complement after it,
+            # so it can never end a clause: "work there." must not become "work they're."
+            if (len(form) == 2 and form[1] in ("'re", "'s", "'ll", "'ve")
+                    and (i + 1 >= n or not any(ch.isalnum() for ch in tokens[i + 1]))):
+                continue
             trial = tokens_lower[:i] + list(form) + tokens_lower[i + 1:]
             score = lm.sentence_logprob(trial)
             if score > best_score:

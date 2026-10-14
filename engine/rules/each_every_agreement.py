@@ -14,6 +14,12 @@ _IRREGULAR_SINGULAR = {
 }
 
 
+_SINGULAR_S_NOUNS = {"news", "series", "species", "means", "lens", "gas", "bias", "canvas", "atlas",
+                     "analysis", "basis", "crisis", "thesis", "diagnosis", "emphasis", "hypothesis",
+                     "status", "focus", "bonus", "virus", "campus", "census", "corpus", "genius", "circus",
+                     "physics", "mathematics", "economics", "politics", "athletics", "gymnastics"}
+
+
 def _to_singular(noun):
     lw = noun.lower()
     if lw in _IRREGULAR_SINGULAR:
@@ -50,7 +56,10 @@ def check(tagged_sentence, tokens):
         if head_idx is None:
             continue
         head_word, head_tag = tagged_sentence[head_idx]
-        if head_tag not in ("NNS", "NNPS"):
+        looks_plural = (head_tag == "NN" and head_word.lower().endswith("s") and len(head_word) > 3
+                        and not head_word.lower().endswith(("ss", "us", "is", "ics"))
+                        and head_word.lower() not in _SINGULAR_S_NOUNS)   # tagger calls "exams" NN
+        if head_tag not in ("NNS", "NNPS") and not looks_plural:
             continue
         correct = _to_singular(head_word)
         if correct.lower() == head_word.lower():

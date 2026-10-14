@@ -12,6 +12,10 @@ still wrong, just differently wrong.
 from engine.rules.countable_uncountable import COMMON_UNCOUNTABLE
 
 
+# valid with "a/an": "a long time", "a work of art", "a coffee", "a help"
+_COUNTABLE_TOO = {"time", "work", "art", "coffee", "tea", "water", "fun", "help"}
+
+
 def check(tagged_sentence, tokens):
     errors = []
     n = len(tagged_sentence)
@@ -29,7 +33,10 @@ def check(tagged_sentence, tokens):
         if head_idx is None:
             continue
         head_word = tagged_sentence[head_idx][0]
-        if head_word.lower() not in COMMON_UNCOUNTABLE:
+        if head_word.lower() not in COMMON_UNCOUNTABLE or head_word.lower() in _COUNTABLE_TOO:
+            continue
+        # "a software engineer", "a music teacher": the uncountable noun is a modifier here
+        if head_idx + 1 < n and tagged_sentence[head_idx + 1][1].startswith("NN"):
             continue
         errors.append({
             "start": i, "end": i + 1,

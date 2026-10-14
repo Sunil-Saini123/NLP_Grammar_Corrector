@@ -1,0 +1,6 @@
+# Words the spell-checker should never "fix". One per line, case-insensitive.
+# Lines starting with # are ignored. Restart the app after editing.
+sunil
+priya
+kubernetes
+postgresql

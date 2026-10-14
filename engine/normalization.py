@@ -12,6 +12,7 @@ instead of needing special-case handling scattered across every rule.
 import re
 
 _MISSING_APOSTROPHE_MAP = {
+    "oclock": "o'clock",
     "dont": "don't", "doesnt": "doesn't", "didnt": "didn't",
     "cant": "can't", "wont": "won't",
     "isnt": "isn't", "arent": "aren't", "wasnt": "wasn't", "werent": "weren't",
@@ -19,7 +20,7 @@ _MISSING_APOSTROPHE_MAP = {
     "couldnt": "couldn't", "wouldnt": "wouldn't", "shouldnt": "shouldn't",
     "im": "I'm", "youre": "you're", "theyre": "they're", "hes": "he's",
     "shes": "she's", "weve": "we've", "ive": "I've", "youve": "you've",
-    "theyve": "they've", "id": "I'd", "youd": "you'd", "theyd": "they'd",
+    "theyve": "they've", "youd": "you'd", "theyd": "they'd",
 }
 
 _PATTERN = re.compile(
@@ -37,6 +38,13 @@ def normalize_contractions(text):
 
     def _repl(m):
         original = m.group(0)
+        # ALL-CAPS tokens are acronyms/abbreviations ("IM", "ID"), not typos.
+        if len(original) > 1 and original.isupper():
+            return original
+        # "he is wont to leave" - 'wont' is a real word after a form of "be".
+        if original.lower() == "wont" and re.search(
+                r"\b(?:is|was|am|are|were|be|been)\s+$", m.string[:m.start()], re.I):
+            return original
         replacement = _MISSING_APOSTROPHE_MAP[original.lower()]
         if original[0].isupper():
             replacement = replacement[0].upper() + replacement[1:]

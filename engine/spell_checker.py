@@ -42,6 +42,14 @@ MODERN_VOCAB = {
 }
 
 
+# Everyday tech/office words that Brown (1960s) and NLTK's list lack. Applied at
+# load time too, so existing data/spell_freq.pkl files need no rebuild.
+EXTRA_VOCAB = {
+    "o'clock", "software", "firmware", "middleware", "malware", "spyware", "touchscreen", "broadband", "browsers", "plugin", "plugins", "widget", "widgets", "checkbox", "homepage", "coworker", "coworkers", "seminars", "webinars", "semesters", "internships", "placements", "recruiters", "algorithms", "chatbots", "dataset", "datasets", "blockchain", "cybersecurity", "lecturers", "diwali", "holi", "eid", "siblings", "neighbour", "neighbours", "lockdown", "vaccines", "podcasts", "subscriptions", "selfies", "emojis", "wifi", "emails", "apps", "usernames", "passwords", "logins", "downloads", "uploads",
+    "info", "pc", "ebook", "etc", "admin", "config", "repo", "api", "apis", "apps", "devs", "bio", "intro", "demo", "docs", "emails", "websites", "smartphones", "laptops", "signup", "vlog", "jpeg", "pdf", "url", "urls", "html", "css", "javascript", "github", "linkedin", "whatsapp", "chatbot", "gpu", "cpu", "ssd", "usb", "hdmi", "webcam", "inbox", "spam", "bots", "ux", "ui", "backend", "frontend", "database", "databases", "workflow", "timeline", "stakeholders", "onboarding", "multitask", "webinar", "startup", "startups", "ecommerce", "okay", "ok", "tv", "wifi",
+}
+
+
 class SpellChecker:
     def __init__(self, freq: Counter):
         self.freq = freq
@@ -58,7 +66,7 @@ class SpellChecker:
                 freq[wl] = 1
         # add common modern words missing from both corpora, with a
         # moderate weight so they're preferred over obscure archaic matches
-        for w in MODERN_VOCAB:
+        for w in MODERN_VOCAB | EXTRA_VOCAB:
             freq[w] = max(freq.get(w, 0), 50)
         return SpellChecker(freq)
 
@@ -71,10 +79,54 @@ class SpellChecker:
     def load(path=MODEL_PATH):
         with open(path, "rb") as f:
             freq = pickle.load(f)
-        return SpellChecker(freq)
+        checker = SpellChecker(freq)
+        checker.add_words(EXTRA_VOCAB)
+        return checker
 
     def is_known(self, word):
-        return word.lower() in self.vocab
+        lw = word.lower()
+        if lw in self.vocab:
+            return True
+        return self._known_inflection(lw)
+
+    def _known_inflection(self, lw):
+        """Regular plural / 3rd-person forms of a known word ("exams", "performs", "studies"), and
+        -ed/-ing forms of known VERBS ("finished", "planning"). Typos stay unknown: we never accept
+        arbitrary stem+suffix, only these regular patterns."""
+        if len(lw) < 4:
+            return False
+        v = self.vocab
+        if lw.endswith("ies") and (lw[:-3] + "y") in v:
+            return True
+        if lw.endswith("es") and lw[:-2] in v and lw[:-2].endswith(("s", "x", "z", "ch", "sh", "o")):
+            return True
+        if lw.endswith("s") and not lw.endswith("ss") and lw[:-1] in v and len(lw[:-1]) >= 3:
+            return True
+        from engine.verb_lexicon import VERBS
+        for suf in ("ing", "ed"):
+            if lw.endswith(suf):
+                stem = lw[:-len(suf)]
+                cands = {stem, stem + "e"}
+                if len(stem) >= 2 and stem[-1] == stem[-2]:
+                    cands.add(stem[:-1])
+                if stem.endswith("i") and suf == "ed":
+                    cands.add(stem[:-1] + "y")
+                if any(c in VERBS and c in v for c in cands):
+                    return True
+        return False
+
+    def is_close(self, word, other):
+        """True if `other` is exactly one edit away from `word`."""
+        return other.lower() in self._edits1(word.lower())
+
+    def add_words(self, words, weight=50):
+        """Teach the checker extra words (names, jargon, a user dictionary)."""
+        for w in words:
+            w = w.strip().lower()
+            if w:
+                self.freq[w] = max(self.freq.get(w, 0), weight)
+                self.vocab.add(w)
+        self.N = sum(self.freq.values())
 
     def _P(self, word):
         return self.freq.get(word, 0) / self.N

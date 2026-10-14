@@ -11,7 +11,7 @@ of a clause, with no intervening subordinate clause or subject change.
 """
 
 _PAST_TAGS = {"VBD"}
-_PRESENT_BASE_TAGS = {"VB", "VBP"}
+_PRESENT_BASE_TAGS = {"VB", "VBP", "VBZ"}
 _COORD = {"and", "but", "or"}
 
 _IRREGULAR_PAST = {
@@ -23,12 +23,40 @@ _IRREGULAR_PAST = {
     "break": "broke", "bring": "brought", "build": "built", "catch": "caught",
     "choose": "chose", "drive": "drove", "drink": "drank", "fall": "fell",
     "fly": "flew", "forget": "forgot", "grow": "grew", "hear": "heard",
-    "hold": "held", "keep": "kept", "lead": "led", "leave": "left", "lose": "lost",
+    "hold": "held", "keep": "kept", "lead": "led", "lose": "lost",
     "meet": "met", "pay": "paid", "read": "read", "ride": "rode", "rise": "rose",
     "sell": "sold", "send": "sent", "sing": "sang", "sleep": "slept",
     "speak": "spoke", "spend": "spent", "swim": "swam", "teach": "taught",
-    "wear": "wore", "win": "won",
+    "wear": "wore", "win": "won", "am": "was", "is": "was", "are": "were",
+    "let": "let", "put": "put", "set": "set", "cut": "cut", "hit": "hit", "hurt": "hurt",
+    "cost": "cost", "shut": "shut", "quit": "quit", "spread": "spread", "lay": "laid",
+    "shake": "shook", "steal": "stole", "throw": "threw", "draw": "drew", "hide": "hid",
+    "bite": "bit", "blow": "blew", "wake": "woke", "tear": "tore", "swear": "swore",
+    "freeze": "froze", "fight": "fought", "seek": "sought", "sink": "sank",
+    "shoot": "shot", "shine": "shone", "light": "lit", "hang": "hung", "lend": "lent",
+    "mean": "meant", "deal": "dealt", "dig": "dug", "feed": "fed", "bend": "bent",
+    "bleed": "bled", "creep": "crept", "lean": "leaned", "spin": "spun", "stick": "stuck",
+    "strike": "struck", "sweep": "swept", "swing": "swung", "understand": "understood",
+    "withdraw": "withdrew", "wind": "wound", "undergo": "underwent", "overcome": "overcame",
+    "forgive": "forgave", "foresee": "foresaw", "mistake": "mistook", "rebuild": "rebuilt",
+    "retell": "retold", "rewrite": "rewrote", "sell": "sold", "slide": "slid", "split": "split",
+    "stand": "stood", "stride": "strode", "bet": "bet", "burst": "burst", "cast": "cast",
+    "beat": "beat", "bind": "bound", "breed": "bred", "kneel": "knelt", "learn": "learned",
 }
+
+# Longer verbs whose final consonant IS doubled (stress on the last syllable).
+_DOUBLE_FINAL = {"admit", "commit", "permit", "prefer", "refer", "occur", "regret", "control",
+                 "submit", "omit", "transfer", "equip", "forget", "begin", "stop", "plan"}
+
+
+def _vowel_groups(word):
+    count, prev = 0, False
+    for ch in word:
+        is_v = ch in "aeiouy"
+        if is_v and not prev:
+            count += 1
+        prev = is_v
+    return count
 
 
 def _to_past_tense(verb):
@@ -39,13 +67,29 @@ def _to_past_tense(verb):
         result = lw + "d"
     elif lw.endswith("y") and len(lw) > 1 and lw[-2] not in "aeiou":
         result = lw[:-1] + "ied"
-    elif len(lw) >= 3 and lw[-1] not in "aeiouwxy" and lw[-2] in "aeiou" and lw[-3] not in "aeiou":
-        result = lw + lw[-1] + "ed"  # simple CVC doubling, e.g. "stop" -> "stopped"
+    elif (len(lw) >= 3 and lw[-1] not in "aeiouwxy" and lw[-2] in "aeiou" and lw[-3] not in "aeiou"
+          and (_vowel_groups(lw) == 1 or lw in _DOUBLE_FINAL)):
+        result = lw + lw[-1] + "ed"      # stop -> stopped, but visit -> visited
     else:
         result = lw + "ed"
     if verb[0].isupper():
         result = result[0].upper() + result[1:]
     return result
+
+
+def third_person_to_base(verb):
+    """goes -> go, studies -> study, watches -> watch, has -> have, does -> do."""
+    lw = verb.lower()
+    special = {"has": "have", "does": "do", "goes": "go", "is": "be", "was": "be"}
+    if lw in special:
+        return special[lw]
+    if lw.endswith("ies") and len(lw) > 4:
+        return lw[:-3] + "y"
+    if lw.endswith(("sses", "shes", "ches", "xes", "zes", "oes")):
+        return lw[:-2]
+    if lw.endswith("s") and not lw.endswith("ss"):
+        return lw[:-1]
+    return lw
 
 
 _SUBORDINATORS = {"when", "while", "before", "after", "until", "as"}
@@ -133,7 +177,9 @@ def check(tagged_sentence, tokens):
             prev_w, prev_t = tagged_sentence[right_idx - 1]
             if prev_w.lower() == "to" or prev_t in ("TO", "MD"):
                 continue
-            suggestion = _to_past_tense(right_word)
+            from engine.verbs import lemma_from_3sg
+            base = lemma_from_3sg(right_word) if right_word.lower().endswith("s") else right_word
+            suggestion = _to_past_tense(base)
             if suggestion.lower() != right_word.lower():
                 errors.append({
                     "start": right_idx, "end": right_idx + 1,

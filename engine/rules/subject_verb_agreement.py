@@ -63,6 +63,12 @@ _NEVER_SUBJECT = {"please", "me", "him", "her", "us", "them"}
                               # not a subject, even though it gets tagged NNP
 
 
+# "because I buy", "if she go", "that he give": these IN-tagged words open a CLAUSE, so the
+# pronoun/noun after them is a real subject (not the object of a preposition).
+_CLAUSE_OPENERS = {"because", "if", "that", "although", "though", "while", "when", "whereas",
+                   "unless", "whether", "once", "so", "than", "as"}
+
+
 def find_subject_before_verb(tagged, verb_idx):
     """Scan left from verb_idx for the nearest TRUE subject (pronoun or
     noun), stopping at clause-breaking punctuation. Nouns inside a
@@ -78,11 +84,15 @@ def find_subject_before_verb(tagged, verb_idx):
         if word.lower() in _NEVER_SUBJECT:
             i -= 1
             continue
+        if (word.lower() in ("some", "many", "few", "several", "both", "others", "most")
+                and all(tagged[k][1] == "RB" for k in range(i + 1, verb_idx))):
+            return i, word, "NNS"          # "..., and some were reading": the quantifier IS the subject
         if tag.startswith("PRP") or tag.startswith("NN"):
             j = i - 1
             while j >= 0 and tagged[j][1] in _PP_SKIPPABLE_TAGS:
                 j -= 1
-            if j >= 0 and tagged[j][1] in ("IN", "TO"):
+            if (j >= 0 and tagged[j][1] in ("IN", "TO")
+                    and tagged[j][0].lower() not in _CLAUSE_OPENERS):
                 i = j - 1  # inside a PP - skip past it, keep looking left
                 continue
             return i, word, tag
@@ -145,6 +155,37 @@ def _preceded_by_be_form(tagged, verb_idx):
         return False
     prev_word, prev_tag = tagged[verb_idx - 1]
     return prev_word.lower() in ("am", "is", "are", "was", "were")
+
+
+def _coordination_anchor(tagged, verb_idx):
+    """'It employs many people and sells products': a verb right after 'and/or/but'
+    continues the PREVIOUS verb's subject (it), not the noun that happens to sit just
+    before the conjunction (people). Returns the index of that earlier verb, or None."""
+    j = verb_idx - 1
+    while j >= 0 and tagged[j][1] == "RB":
+        j -= 1
+    if j < 1 or tagged[j][0].lower() not in ("and", "or", "but"):
+        return None
+    for k in range(j - 1, -1, -1):
+        w, t = tagged[k]
+        if t in (",", ".", ":", ";"):
+            return None
+        if t in ("VBZ", "VBP", "VBD", "VB") and w.lower() != "to":
+            return k
+    return None
+
+
+def _coordinated_with_imperative(tagged, verb_idx):
+    """True for 'Open the file and run the script.' - the second verb is
+    coordinated with a sentence-initial imperative, so the noun before it
+    ('file') is an object, not its subject."""
+    if verb_idx < 2 or tagged[0][1] != "VB" or tagged[0][0].lower() in ("be",):
+        return False
+    j = verb_idx - 1
+    while j > 0 and tagged[j][1] in ("RB",):
+        j -= 1
+    return tagged[j][0].lower() in ("and", "or", "then") and not any(
+        t in (".", ":") for _, t in tagged[:verb_idx])
 
 
 def _is_mistagged_like_verb(tagged, i):
@@ -210,13 +251,17 @@ def check(tagged_sentence, tokens):
         # --- Case 1: base-form verb (VBP, or mistagged VB) used with singular
         # 3rd-person subject, e.g. "He go to school" -> go should be goes
         if ((tag in ("VBP", "VB") or _is_mistagged_like_verb(tagged_sentence, i))
+                and not (lw.endswith("ed") and len(lw) > 4)       # "stayed" is past, never "stayeds"
                 and lw not in IRREGULAR_BE
                 and _is_finite_bare_verb(tagged_sentence, i)
                 and not _coordinated_with_past_tense_verb(tagged_sentence, i)
+                and not _coordinated_with_imperative(tagged_sentence, i)
                 and not _preceded_by_be_form(tagged_sentence, i)
                 and not _preceded_by_do_support_inversion(tagged_sentence, i)):
-            subj_idx, subj_word, subj_tag = find_subject_before_verb(tagged_sentence, i)
-            if subj_word and subj_idx is not None and _no_blocker_between(tagged_sentence, subj_idx, i):
+            anchor = _coordination_anchor(tagged_sentence, i)
+            ref = i if anchor is None else anchor
+            subj_idx, subj_word, subj_tag = find_subject_before_verb(tagged_sentence, ref)
+            if subj_word and subj_idx is not None and _no_blocker_between(tagged_sentence, subj_idx, ref):
                 subj_lw = subj_word.lower()
                 is_singular_subject = (
                     subj_lw in SINGULAR_PRONOUNS or _is_singular_noun(subj_tag)
@@ -233,7 +278,9 @@ def check(tagged_sentence, tokens):
         # --- Case 2: 3rd-person-singular verb (VBZ) used with plural subject
         # e.g. "They goes to school" -> goes should be go
         if tag == "VBZ" and lw not in IRREGULAR_BE:
-            subj_idx, subj_word, subj_tag = find_subject_before_verb(tagged_sentence, i)
+            anchor = _coordination_anchor(tagged_sentence, i)
+            subj_idx, subj_word, subj_tag = find_subject_before_verb(
+                tagged_sentence, i if anchor is None else anchor)
             if subj_word:
                 subj_lw = subj_word.lower()
                 is_plural_subject = (
@@ -276,30 +323,16 @@ _IRREGULAR_BASE = {v: k for k, v in _IRREGULAR_3PS.items()}
 
 
 def _to_third_person_singular(verb):
+    from engine.verbs import third_person
     lw = verb.lower()
-    if lw in _IRREGULAR_3PS:
-        result = _IRREGULAR_3PS[lw]
-    elif lw.endswith(("s", "x", "z", "ch", "sh")):
-        result = lw + "es"
-    elif lw.endswith("y") and lw[-2] not in "aeiou":
-        result = lw[:-1] + "ies"
-    else:
-        result = lw + "s"
+    result = _IRREGULAR_3PS[lw] if lw in _IRREGULAR_3PS else third_person(lw)
     return _match_case(verb, result)
 
 
 def _to_base_form(verb):
+    from engine.verbs import lemma_from_3sg
     lw = verb.lower()
-    if lw in _IRREGULAR_BASE:
-        result = _IRREGULAR_BASE[lw]
-    elif lw.endswith("ies"):
-        result = lw[:-3] + "y"
-    elif lw.endswith("es") and lw[:-2].endswith(("s", "x", "z", "ch", "sh")):
-        result = lw[:-2]
-    elif lw.endswith("s") and not lw.endswith("ss"):
-        result = lw[:-1]
-    else:
-        result = lw
+    result = _IRREGULAR_BASE[lw] if lw in _IRREGULAR_BASE else lemma_from_3sg(lw)
     return _match_case(verb, result)
 
 

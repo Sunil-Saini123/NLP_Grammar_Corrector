@@ -51,7 +51,8 @@ NLP_Grammar_Corrector/
 ├── test_cli.py                  # interactive CLI to test the engine — no OS dependencies
 ├── build_models.py              # one-time script to train & save the LM + spell model
 ├── desktop_app/
-│   └── hotkey_listener.py       # LAYER 2 — OS integration (global hotkey, clipboard)
+│   ├── hotkey_listener.py       # LAYER 2 — draggable suggestion card + capture/replace workflow
+│   └── winapi.py                # LAYER 2 — Win32 layer (RegisterHotKey, SendInput, clipboard sequence)
 └── requirements.txt
 ```
 
@@ -177,28 +178,54 @@ To improve accuracy further: add more labeled sentences to
 `python tests/evaluate.py`, and tune the relevant rule in `engine/rules/`.
 **Do this entirely within Layer 1** — no need to touch `desktop_app/` at all.
 
-## Step 2 — Use it system-wide (Layer 2, once you're happy with Layer 1's accuracy)
+## Step 2 — Use it system-wide (Layer 2, Windows)
 
 ```bash
-python desktop_app/hotkey_listener.py
+pip install -r requirements.txt
+python desktop_app/hotkey_listener.py          # no Administrator rights needed
+python desktop_app/hotkey_listener.py --demo   # preview the popup on any OS
 ```
 
-Then, in **any application** (Word, Gmail, Google Docs, Notepad, Slack...):
+In **any application** (Word, Gmail, Google Docs, Notepad, Slack...):
 1. Select some text
 2. Press **Ctrl+Alt+H**
-3. The selection is replaced with the corrected version
+3. A small card appears next to the cursor showing the original and the suggestion, with
+   every changed word highlighted. Click **Accept** (or press **Ctrl+Alt+Enter**) to replace the
+   selection, **Copy** to only copy the result, or **Dismiss**.
 
-Platform notes:
-- **Windows**: works out of the box.
-- **macOS**: grant Accessibility + Input Monitoring permissions to your
-  terminal/Python under System Settings → Privacy & Security.
-- **Linux**: works under X11 out of the box; Wayland restricts global
-  hotkeys by design (bind the script at the compositor level instead).
+The card:
+- **Drag it** by the header (or any empty area); it can't be lost off-screen.
+- **Pin** keeps it open and makes later cards appear where you left it.
+- **Why?** expands a list of the rules that fired; detection-only advice
+  (comma splice, fragment) shows as *Heads-up*.
+- Never steals focus, so the text you selected stays selected.
 
-Layer 2 contains **zero grammar logic** — it only calls
-`engine.corrector.GrammarCorrector.correct()`. This means you can re-tune
-rules, retrain the LM, or add new error categories in Layer 1 and Layer 2
-keeps working unchanged.
+Every outcome gives on-screen feedback - *No text selected*, *No issues found*,
+*Clipboard busy*, *Select text in a regular app (terminals)* - so it never looks "dead".
+
+Options: `--hotkey ctrl+alt+g`, `--accept-hotkey ctrl+alt+enter`.
+Names/brands the spell-checker keeps changing? Put them, one per line, in `user_dictionary.txt`.
+
+**Paragraph-aware corrections** (`correct_document`): the engine tracks tense across a paragraph. A past-time
+marker ("Yesterday", "last week", "two years ago", "in 2019") makes main-clause verbs past
+(`I goes` -> `went`, `he give` -> `gave`), while embedded clauses ("how AI is changing...") and a
+present-time marker ("today", "always", "will") are respected. It also fixes `for attend` -> `to attend`,
+`many student` -> `many students`, `was participated` -> `participated`, `explain us` -> `explain to us`,
+`to the college` -> `to college`, `at evening` -> `in the evening`, `think critical` -> `think critically`,
+`get good job` -> `get a good job`, `not finished` -> `did not finish`, `say me` -> `tell me`, `I am agree` -> `I agree`,
+`happy to heard` -> `to hear`, `thinking to sell` -> `thinking of selling`, `I and my friend` -> `my friend and I`,
+and adds the comma in "..., and he gave ...". Rules: `engine/rules/narrative_tense.py` and friends; tests in
+`tests/test_document_mode.py` and `tests/test_paragraphs.py`. A Brown-corpus verb lexicon
+(`engine/verb_lexicon.py`, regenerate with `python tools/make_verb_lexicon.py`) lets the engine recognise
+verbs the POS tagger mislabels as nouns ("My mother cook food").
+
+Layer 2 contains **zero grammar logic** - it only calls
+`GrammarCorrector.correct_document()`, which keeps line breaks/lists/quotes and leaves URLs,
+e-mails, paths and code untouched.
+
+Layer 2 files: `hotkey_listener.py` (UI + workflow) and `winapi.py` (RegisterHotKey,
+SendInput, clipboard sequence number - pure ctypes). Tests: `python -m tests.test_desktop_logic`
+and `python -m tests.test_document_mode`.
 
 ## Known limitations (honest, since this is classical NLP)
 
